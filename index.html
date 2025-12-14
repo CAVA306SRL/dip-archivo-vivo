@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>DIP • Archivo Vivo — Cinema 3D</title>
+<style>
+  :root{
+    --ink: rgba(235,245,255,.92);
+    --muted: rgba(235,245,255,.56);
+    --line: rgba(160,190,220,.14);
+    --a1: rgba(60,255,190,.95);
+    --shadow: rgba(0,0,0,.65);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; overflow:hidden;
+    background:
+      radial-gradient(1200px 800px at 20% 15%, rgba(30,60,90,.35), transparent 60%),
+      radial-gradient(900px 700px at 80% 85%, rgba(8,18,30,.85), transparent 55%),
+      linear-gradient(180deg, #070b12, #05070c);
+    color:var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  }
+  #c{ position:fixed; inset:0; width:100%; height:100%; display:block; }
+
+  .hud{
+    position:fixed; left:12px; right:12px;
+    top: calc(10px + env(safe-area-inset-top));
+    display:flex; gap:10px; align-items:center;
+    z-index:10;
+  }
+  .badge{
+    padding:10px 12px; border-radius:16px;
+    background: rgba(10,14,20,.35);
+    border:1px solid rgba(160,190,220,.10);
+    backdrop-filter: blur(12px);
+  }
+  .title{ font-size:12px; letter-spacing:.22em; text-transform:uppercase; color: rgba(235,245,255,.72); }
+  .subtitle{ font-size:12px; color: rgba(235,245,255,.46); margin-top:2px; }
+
+  .panel{
+    flex:1; min-width:0;
+    display:flex; gap:8px; align-items:center;
+    padding:10px 12px; border-radius:16px;
+    background: linear-gradient(180deg, rgba(12,18,28,.82), rgba(8,12,18,.55));
+    border:1px solid rgba(160,190,220,.16);
+    box-shadow: 0 18px 60px var(--shadow);
+    backdrop-filter: blur(12px);
+  }
+  .inp{
+    flex:1; min-width:0;
+    padding:11px 12px; border-radius:14px;
+    border:1px solid rgba(160,190,220,.20);
+    background: rgba(0,0,0,.30);
+    color:var(--ink);
+    outline:none;
+    text-transform:uppercase;
+    font-size:16px;
+  }
+  .btn{
+    cursor:pointer;
+    padding:11px 12px; border-radius:14px;
+    border:1px solid rgba(60,255,190,.30);
+    background: linear-gradient(180deg, rgba(60,255,190,.14), rgba(60,255,190,.06));
+    color:var(--ink);
+    white-space:nowrap;
+  }
+
+  .status{
+    position:fixed; right:12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index:10;
+    font-size:12px;
+    color: rgba(235,245,255,.72);
+    background: rgba(10,14,20,.35);
+    border:1px solid rgba(160,190,220,.10);
+    padding:8px 10px;
+    border-radius:999px;
+    backdrop-filter: blur(10px);
+    max-width: 92vw;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  .card{
+    position:fixed; left:50%; top:56%;
+    transform: translate(-50%,-50%);
+    width:min(640px, 92vw);
+    border-radius:22px;
+    padding:14px;
+    background: linear-gradient(180deg, rgba(10,14,20,.84), rgba(8,10,14,.72));
+    border: 1px solid rgba(60,255,190,.26);
+    box-shadow: 0 18px 70px rgba(0,0,0,.62);
+    backdrop-filter: blur(12px);
+    z-index:20;
+    display:none;
+  }
+  .card.show{display:block}
+  .card h3{
+    margin:2px 0 6px 0;
+    font-size:14px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+  }
+  .card p{
+    margin:0 0 12px 0;
+    font-size:12px;
+    color: rgba(235,245,255,.56);
+    line-height:1.35;
+  }
+  .actions{display:flex; gap:10px; flex-wrap:wrap}
+  .btn2{
+    cursor:pointer;
+    padding:10px 12px;
+    border-radius:14px;
+    border:1px solid rgba(160,190,220,.18);
+    background: rgba(0,0,0,.25);
+    color: var(--ink);
+  }
+  .btn2.primary{
+    border-color: rgba(60,255,190,.32);
+    background: rgba(60,255,190,.10);
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="hud">
+  <div class="badge">
+    <div class="title">DIP • Archivo Vivo</div>
+    <div class="subtitle">Cinema 3D — plano secuencia dirigido</div>
+  </div>
+  <div class="panel">
+    <input class="inp" id="q" value="INC-0123" placeholder="INC-0123" />
+    <button class="btn" id="go">Buscar</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+</div>
+
+<div class="status" id="status">Inicializando…</div>
+
+<div class="card" id="card">
+  <h3 id="cardTitle">INC-0000</h3>
+  <p>Hallazgo confirmado. Archivo desbloqueado en modo confidencial.</p>
+  <div class="actions">
+    <button class="btn2 primary" id="enter">Entrar / Ver informe</button>
+    <button class="btn2" id="links">Ver vínculos</button>
+    <button class="btn2" id="hist">Historial</button>
+  </div>
+</div>
+
+<script type="module">
+  // ========= Parse INC =========
+  function parseINC(text){
+    let s = (text ?? "").normalize("NFKC").toUpperCase().trim();
+    s = s.replace(/[\u200B-\u200D\uFEFF]/g,"");
+    s = s.replace(/[–—−]/g,"-").replace(/\s+/g,"");
+    const m = s.match(/^INC-(\d{1,6})$/);
+    if(!m) return null;
+    const num = parseInt(m[1],10);
+    return { id:`INC-${m[1].padStart(4,"0")}`, n:num };
+  }
+
+  // ========= Imports =========
+  import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+  import { EffectComposer } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js";
+  import { RenderPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js";
+  import { UnrealBloomPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js";
+
+  const statusEl = document.getElementById("status");
+  const card = document.getElementById("card");
+  const cardTitle = document.getElementById("cardTitle");
+  const showCard = (id)=>{ cardTitle.textContent=id; card.classList.add("show"); };
+  const hideCard = ()=> card.classList.remove("show");
+
+  // ========= Renderer / Scene =========
+  const canvas = document.getElementById("c");
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio||1));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(new THREE.Color(0x05070c), 10, 86);
+
+  const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 250);
+  camera.position.set(0, 1.65, 7.5);
+
+  // Post
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.6, 0.12);
+  composer.addPass(bloom);
+
+  // Lights (institucional fría)
+  const ambient = new THREE.AmbientLight(0x99b8cc, 0.16);
+  scene.add(ambient);
+
+  const key = new THREE.SpotLight(0xaad8ff, 1.1, 120, Math.PI/5, 0.45, 1.0);
+  key.position.set(4, 7.5, 6);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024,1024);
+  scene.add(key);
+
+  const rim = new THREE.DirectionalLight(0x66ffcc, 0.35);
+  rim.position.set(-6, 4, -8);
+  scene.add(rim);
+
+  const tube1 = new THREE.RectAreaLight(0x8fd3ff, 3.2, 10, 1.2);
+  tube1.position.set(0, 3.6, -10);
+  tube1.rotation.x = -Math.PI/2;
+  scene.add(tube1);
+
+  const tube2 = new THREE.RectAreaLight(0x8fd3ff, 3.2, 10, 1.2);
+  tube2.position.set(0, 3.6, -28);
+  tube2.rotation.x = -Math.PI/2;
+  scene.add(tube2);
+
+  // Materials
+  const matFloor = new THREE.MeshStandardMaterial({ color:0x05070c, roughness:0.35, metalness:0.2 });
+  const matWall  = new THREE.MeshStandardMaterial({ color:0x0a0f18, roughness:0.75, metalness:0.12 });
+  const matRack  = new THREE.MeshStandardMaterial({ color:0x0c1422, roughness:0.55, metalness:0.25 });
+  const matDrawer= new THREE.MeshStandardMaterial({ color:0x0c1420, roughness:0.52, metalness:0.30 });
+  const matDoorBase = new THREE.MeshStandardMaterial({ color:0x0f1a2a, roughness:0.35, metalness:0.35, emissive:0x000000 });
+
+  // Floor + grid
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), matFloor);
+  floor.rotation.x = -Math.PI/2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  const grid = new THREE.GridHelper(220, 220, 0x224455, 0x112233);
+  grid.material.opacity = 0.12;
+  grid.material.transparent = true;
+  scene.add(grid);
+
+  // ========= World build =========
+  const world = new THREE.Group();
+  scene.add(world);
+
+  const corridorW = 6.0, wallT = 0.25, wallH = 4.4;
+  const drawerW = 1.25, drawerH = 0.65, drawerD = 0.55;
+  const rows = 5, cols = 10, stepZ = 1.18;
+
+  function makeGlowSprite(){
+    const size = 128;
+    const cnv = document.createElement("canvas");
+    cnv.width = cnv.height = size;
+    const g2 = cnv.getContext("2d");
+    const g = g2.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+    g.addColorStop(0,"rgba(60,255,190,0.95)");
+    g.addColorStop(0.35,"rgba(60,255,190,0.35)");
+    g.addColorStop(1,"rgba(60,255,190,0)");
+    g2.fillStyle = g;
+    g2.fillRect(0,0,size,size);
+    const tex = new THREE.CanvasTexture(cnv);
+    const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending });
+    const spr = new THREE.Sprite(mat);
+    spr.scale.set(2.2,2.2,1);
+    spr.visible = false;
+    return spr;
+  }
+
+  function createDrawerUnit(){
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(drawerW, drawerH, drawerD), matDrawer);
+    body.castShadow = true; body.receiveShadow = true;
+    g.add(body);
+
+    const doorMat = matDoorBase.clone();
+    const door = new THREE.Mesh(new THREE.BoxGeometry(drawerW*0.98, drawerH*0.92, 0.04), doorMat);
+    door.castShadow = true;
+
+    const pivot = new THREE.Group();
+    pivot.position.set(0, -drawerH*0.46, drawerD/2 + 0.02);
+    door.position.set(0, drawerH*0.46, 0);
+    pivot.add(door);
+    g.add(pivot);
+
+    const innerLight = new THREE.PointLight(0x3cffbe, 0, 5.5, 1.5);
+    innerLight.position.set(0, 0, drawerD*0.1);
+    g.add(innerLight);
+
+    const glow = makeGlowSprite();
+    glow.position.set(0, 0, drawerD/2 + 0.28);
+    g.add(glow);
+
+    g.userData = { pivot, door, innerLight, glow, openT:0, active:false, flashT:0, incId:null };
+    return g;
+  }
+
+  function buildCorridor(axis, origin){
+    const group = new THREE.Group();
+    group.position.copy(origin);
+
+    const len = cols * stepZ + 10;
+    const wallGeo = new THREE.BoxGeometry(wallT, wallH, len);
+
+    const leftWall  = new THREE.Mesh(wallGeo, matWall);
+    const rightWall = new THREE.Mesh(wallGeo, matWall);
+    leftWall.receiveShadow = true; rightWall.receiveShadow = true;
+
+    if(axis === "Z"){
+      leftWall.position.set(-(corridorW/2), wallH/2, -len/2 + 2);
+      rightWall.position.set(+(corridorW/2), wallH/2, -len/2 + 2);
+    } else {
+      leftWall.rotation.y = Math.PI/2;
+      rightWall.rotation.y= Math.PI/2;
+      leftWall.position.set(-len/2 + 2, wallH/2, -(corridorW/2));
+      rightWall.position.set(-len/2 + 2, wallH/2, +(corridorW/2));
+    }
+    group.add(leftWall, rightWall);
+
+    const rackGeo = new THREE.BoxGeometry(0.35, 3.6, len-8);
+    const leftRack = new THREE.Mesh(rackGeo, matRack);
+    const rightRack= new THREE.Mesh(rackGeo, matRack);
+    leftRack.castShadow = true; rightRack.castShadow = true;
+
+    if(axis==="Z"){
+      leftRack.position.set(-(corridorW/2 - 0.65), 1.8, -len/2 + 2);
+      rightRack.position.set(+(corridorW/2 - 0.65), 1.8, -len/2 + 2);
+    } else {
+      leftRack.rotation.y = Math.PI/2;
+      rightRack.rotation.y= Math.PI/2;
+      leftRack.position.set(-len/2 + 2, 1.8, -(corridorW/2 - 0.65));
+      rightRack.position.set(-len/2 + 2, 1.8, +(corridorW/2 - 0.65));
+    }
+    group.add(leftRack, rightRack);
+
+    const drawers = [];
+    for(let side=0; side<2; side++){
+      const sgn = side===0 ? -1 : +1;
+      for(let c=0; c<cols; c++){
+        for(let r=0; r<rows; r++){
+          const d = createDrawerUnit();
+          const y = 0.85 + r*(drawerH + 0.12);
+          const along = c*stepZ;
+
+          if(axis==="Z"){
+            d.position.set(sgn*(corridorW/2 - 1.05), y, -along);
+            d.rotation.y = sgn > 0 ? -Math.PI/2 : Math.PI/2;
+          } else {
+            d.position.set(-along, y, sgn*(corridorW/2 - 1.05));
+            d.rotation.y = sgn > 0 ? Math.PI : 0;
+          }
+          d.userData.side = side;
+          d.userData.col = c;
+          d.userData.row = r;
+          drawers.push(d);
+          group.add(d);
+        }
+      }
+    }
+    group.userData = { axis, drawers };
+    return group;
+  }
+
+  const corrA = buildCorridor("Z", new THREE.Vector3(0,0,0));
+  const endA  = new THREE.Vector3(0,0, -(cols*stepZ + 3.5));
+  const corrB = buildCorridor("X", endA.clone());
+  const endB  = endA.clone().add(new THREE.Vector3(-(cols*stepZ + 3.5),0,0));
+  const corrC = buildCorridor("Z", endB.clone());
+
+  world.add(corrA, corrB, corrC);
+
+  // ========= Deterministic mapping =========
+  function locateDrawerForINC(inc){
+    const n = inc.n;
+    const side = n % 2;                 // 0 L, 1 R
+    const col  = Math.floor(n / 3) % cols;
+    const row  = Math.floor(n / (3*cols)) % rows;
+    const d = corrC.userData.drawers.find(x =>
+      x.userData.side===side && x.userData.col===col && x.userData.row===row
+    ) || corrC.userData.drawers[0];
+    d.userData.incId = inc.id;
+    return d;
+  }
+
+  // ========= Camera path =========
+  const camState = { phase:"idle", t:0, dur:5.2, curve:null, look:null, target:null, dimmer:0 };
+  const climaxLight = new THREE.PointLight(0x3cffbe, 0, 10, 1.2);
+  scene.add(climaxLight);
+
+  const easeInOut = (t)=> t*t*(3-2*t);
+
+  function computePathToDrawer(drawer){
+    const drawerPos = drawer.getWorldPosition(new THREE.Vector3());
+    const drawerForward = new THREE.Vector3(0,0,1).applyQuaternion(drawer.getWorldQuaternion(new THREE.Quaternion()));
+    const arrivePos = drawerPos.clone().add(drawerForward.clone().multiplyScalar(1.45)).add(new THREE.Vector3(0,0.18,0));
+
+    const p0 = new THREE.Vector3(0, 1.65, 7.5);
+    const p1 = new THREE.Vector3(0, 1.65, 2.5);
+    const p2 = new THREE.Vector3(0, 1.65, -10.0);
+    const p3 = new THREE.Vector3(0, 1.65, endA.z + 1.3);
+    const p4 = new THREE.Vector3(-4.0, 1.65, endA.z);
+    const p5 = new THREE.Vector3(endB.x + 1.3, 1.65, endA.z);
+    const p6 = new THREE.Vector3(endB.x, 1.65, endB.z - 4.0);
+    const p7 = arrivePos.clone();
+
+    const curve = new THREE.CatmullRomCurve3([p0,p1,p2,p3,p4,p5,p6,p7], false, "catmullrom", 0.6);
+
+    const l0 = new THREE.Vector3(0, 1.45, 0);
+    const l1 = new THREE.Vector3(0, 1.45, -6);
+    const l2 = new THREE.Vector3(0, 1.45, -16);
+    const l3 = new THREE.Vector3(-2.5, 1.45, endA.z - 2);
+    const l4 = new THREE.Vector3(endB.x - 6, 1.45, endA.z);
+    const l5 = drawerPos.clone().add(new THREE.Vector3(0, 0.1, 0));
+    const look = new THREE.CatmullRomCurve3([l0,l1,l2,l3,l4,l5], false, "catmullrom", 0.6);
+
+    return {curve, look};
+  }
+
+  function setEnvironmentDim(a){
+    camState.dimmer = a;
+    ambient.intensity = 0.16 * (1 - 0.65*a);
+    rim.intensity     = 0.35 * (1 - 0.55*a);
+    key.intensity     = 1.10 * (1 - 0.45*a);
+    tube1.intensity   = 3.20 * (1 - 0.65*a);
+    tube2.intensity   = 3.20 * (1 - 0.65*a);
+    bloom.strength    = 0.55 + 0.95*a;
+  }
+
+  function resetDrawers(){
+    for(const d of corrA.userData.drawers.concat(corrB.userData.drawers, corrC.userData.drawers)){
+      d.userData.openT = 0;
+      d.userData.flashT = 0;
+      d.userData.active = false;
+      d.userData.pivot.rotation.x = 0;
+      d.userData.door.material.emissive.set(0x000000);
+      d.userData.door.material.emissiveIntensity = 0;
+      d.userData.innerLight.intensity = 0;
+      d.userData.glow.visible = false;
+      d.userData.glow.material.opacity = 0.0;
+      d.userData.glow.scale.set(2.2,2.2,1);
+    }
+  }
+
+  function beginTravel(inc){
+    hideCard();
+    resetDrawers();
+    setEnvironmentDim(0);
+
+    const target = locateDrawerForINC(inc);
+    camState.target = target;
+
+    const {curve, look} = computePathToDrawer(target);
+    camState.curve = curve;
+    camState.look = look;
+    camState.t = 0;
+    camState.dur = 5.2;
+    camState.phase = "travel";
+
+    statusEl.textContent = `Viaje iniciado → ${inc.id}`;
+  }
+
+  function updateTravel(dt){
+    camState.t += dt;
+    const t = Math.min(1, camState.t / camState.dur);
+    const tt = easeInOut(t);
+
+    camera.position.copy(camState.curve.getPoint(tt));
+    const lookT = Math.min(1, tt*1.05);
+    const lk = camState.look.getPoint(lookT);
+    camera.lookAt(lk);
+
+    // breathing
+    const breath = Math.sin(performance.now()*0.0016) * 0.0025;
+    camera.rotation.z += breath;
+
+    if(t >= 1){
+      camState.phase = "climax";
+      const id = camState.target.userData.incId || "INC-????";
+      statusEl.textContent = `Llegada → ${id}`;
+      camState.target.userData.active = true;
+      camState.target.userData.door.material.emissive.set(0x3cffbe);
+      camState.target.userData.door.material.emissiveIntensity = 0.55;
+      camState.target.userData.flashT = 1.0;
+      camState.target.userData.glow.visible = true;
+      camState.target.userData.glow.material.opacity = 0.9;
+    }
+  }
+
+  function updateClimax(dt){
+    const d = camState.target;
+    if(!d) return;
+
+    setEnvironmentDim(Math.min(1, camState.dimmer + dt*1.1));
+
+    d.userData.openT = Math.min(1, d.userData.openT + dt*0.75);
+    d.userData.pivot.rotation.x = -d.userData.openT * 1.05;
+
+    d.userData.innerLight.intensity = 2.8 * (0.35 + 0.65*d.userData.openT) * (0.7 + 0.3*camState.dimmer);
+
+    if(d.userData.flashT > 0){
+      d.userData.flashT = Math.max(0, d.userData.flashT - dt*1.4);
+      const k = d.userData.flashT;
+      d.userData.glow.material.opacity = 0.25 + 0.65*(k*k);
+      d.userData.glow.scale.setScalar(2.2 + (1-k)*1.5);
+    } else {
+      d.userData.glow.material.opacity = 0.18;
+      d.userData.glow.scale.setScalar(2.6);
+    }
+
+    const wp = d.getWorldPosition(new THREE.Vector3());
+    climaxLight.position.copy(wp.clone().add(new THREE.Vector3(0,0.2,0.6)));
+    climaxLight.intensity = 2.0 * camState.dimmer;
+    climaxLight.distance = 8;
+
+    if(d.userData.openT >= 1){
+      camState.phase = "ready";
+      const id = d.userData.incId || "INC-????";
+      statusEl.textContent = `Hallazgo ✅ ${id}`;
+      showCard(id);
+    }
+  }
+
+  // ========= UI =========
+  document.getElementById("go").addEventListener("click", ()=>{
+    const inc = parseINC(document.getElementById("q").value);
+    if(!inc){ statusEl.textContent = "Formato inválido. Usá INC-0123"; return; }
+    beginTravel(inc);
+  });
+
+  document.getElementById("reset").addEventListener("click", ()=>{
+    hideCard();
+    resetDrawers();
+    setEnvironmentDim(0);
+    camState.phase="idle";
+    camState.curve=null;
+    camState.look=null;
+    camState.target=null;
+    camera.position.set(0,1.65,7.5);
+    camera.lookAt(0,1.45,0);
+    statusEl.textContent = "Listo ✅";
+  });
+
+  document.getElementById("enter").addEventListener("click", ()=> alert("Abrir informe (demo): " + cardTitle.textContent));
+  document.getElementById("links").addEventListener("click", ()=> alert("Vínculos (demo): " + cardTitle.textContent));
+  document.getElementById("hist").addEventListener("click",  ()=> alert("Historial (demo): " + cardTitle.textContent));
+
+  // ========= Loop =========
+  let last = performance.now();
+  function tick(now){
+    const dt = Math.min(0.05, (now-last)/1000);
+    last = now;
+
+    if(camState.phase==="travel") updateTravel(dt);
+    if(camState.phase==="climax") updateClimax(dt);
+
+    composer.render();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  addEventListener("resize", ()=>{
+    renderer.setPixelRatio(Math.min(2, devicePixelRatio||1));
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    composer.setSize(innerWidth, innerHeight);
+    bloom.setSize(innerWidth, innerHeight);
+  });
+
+  statusEl.textContent = "Listo ✅ Cinema 3D activo";
+  setTimeout(()=> document.getElementById("go").click(), 650);
+</script>
+</body>
+</html>
